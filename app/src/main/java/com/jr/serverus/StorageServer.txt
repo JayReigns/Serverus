@@ -1,0 +1,414 @@
+package com.jr.serverus;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.CompressFormat;
+import android.os.Environment;
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.RandomAccessFile;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+
+public class StorageServer implements Runnable {
+    private final String HTTP_ERROR_RANGE = "416 Range Not Satisfiable";
+    private final String HTTP_OK = "200 OK";
+    private final String HTTP_PARTIAL = "206 Partial Content";
+    private final String PREVIEW_QUERY = "q=preview";
+    private final String RANGE_HEADER = "Range: bytes=";
+    private final String THUMB_QUERY = "q=thumb";
+    private Socket connect;
+    private Context cotx;
+    private BufferedOutputStream dataOut = ((BufferedOutputStream) null);
+    private IconManager icm;
+    private DataInputStream in = ((DataInputStream) null);
+    private long max;
+    private long min;
+    private PrintWriter out = ((PrintWriter) null);
+    private String status = "200 OK";
+
+    /* renamed from: com.jr.storageserver.StorageServer$100000000 */
+    class AnonymousClass100000000 implements Runnable {
+        private final int val$PORT;
+        private final Context val$ctx;
+
+        AnonymousClass100000000(int i, Context context) {
+            Context context2 = context;
+            this.val$PORT = i;
+            this.val$ctx = context2;
+        }
+
+        @Override
+        public void run() {
+            try {
+                ServerSocket serverSocket = r10;
+                ServerSocket serverSocket2 = new ServerSocket(this.val$PORT);
+                ServerSocket serverSocket3 = serverSocket;
+                while (true) {
+                    StorageServer storageServer = r10;
+                    StorageServer storageServer2 = new StorageServer(serverSocket3.accept(), this.val$ctx);
+                    StorageServer storageServer3 = storageServer;
+                    Thread thread = r10;
+                    Thread thread2 = new Thread(storageServer3);
+                    thread.start();
+                }
+            } catch (IOException e) {
+                ((MainActivity) this.val$ctx).showText(e.toString());
+            }
+        }
+    }
+
+    public StorageServer(Socket socket, Context context) {
+        Socket socket2 = socket;
+        Context context2 = context;
+        this.connect = socket2;
+        this.cotx = context2;
+        IconManager iconManager = r8;
+        IconManager iconManager2 = new IconManager(context2);
+        this.icm = iconManager;
+    }
+
+    public static void start(int i, Context context) {
+        Thread thread = r10;
+        AnonymousClass100000000 anonymousClass100000000 = r10;
+        AnonymousClass100000000 anonymousClass1000000002 = new AnonymousClass100000000(i, context);
+        Thread thread2 = new Thread(anonymousClass100000000);
+        thread.start();
+    }
+
+    @Override
+    public void run() {
+        Exception exception;
+        try {
+            File file;
+            File file2;
+            DataInputStream dataInputStream = r26;
+            DataInputStream dataInputStream2 = new DataInputStream(this.connect.getInputStream());
+            this.in = dataInputStream;
+            PrintWriter printWriter = r26;
+            PrintWriter printWriter2 = new PrintWriter(this.connect.getOutputStream());
+            this.out = printWriter;
+            BufferedOutputStream bufferedOutputStream = r26;
+            BufferedOutputStream bufferedOutputStream2 = new BufferedOutputStream(this.connect.getOutputStream());
+            this.dataOut = bufferedOutputStream;
+            String str = "";
+            do {
+                StringBuffer stringBuffer = r26;
+                StringBuffer stringBuffer2 = new StringBuffer();
+                stringBuffer = stringBuffer.append(str);
+                stringBuffer2 = r26;
+                StringBuffer stringBuffer3 = new StringBuffer();
+                str = stringBuffer.append(stringBuffer2.append(this.in.readLine()).append("\n").toString()).toString();
+            } while (this.in.available() > 0);
+            String str2 = (String) null;
+            str2 = URLDecoder.decode(str.substring(0, str.indexOf("\n")).split(" ")[1]);
+            int lastIndexOf = str2.lastIndexOf("q=");
+            if (lastIndexOf != -1) {
+                String substring = str2.substring(lastIndexOf);
+                String substring2 = str2.substring(0, lastIndexOf);
+                String str3 = substring;
+                if (str3.equals("q=thumb")) {
+                    IconManager iconManager = this.icm;
+                    file = r26;
+                    File file3 = new File(substring2);
+                    Bitmap icon = iconManager.getIcon(file);
+                    sendHeader("image/png");
+                    boolean compress = icon.compress(CompressFormat.PNG, 20, this.dataOut);
+                    this.dataOut.close();
+                } else if (str3.equals("q=preview")) {
+                    file2 = r26;
+                    file = new File(substring2);
+                    File file4 = file2;
+                    String ext = MimeType.getExt(file4.getName());
+                    if (ext.equals("mp3")) {
+                        sendHTML(createHTMLFromMp3(file4));
+                    } else if (ext.equals("mp4")) {
+                        sendHTML(createHTMLFromMp4(file4));
+                    }
+                }
+            }
+            File file5 = (File) null;
+            if (str2.equals("/")) {
+                file5 = Environment.getExternalStorageDirectory();
+            } else {
+                file2 = r26;
+                file = new File(str2);
+                file5 = file2;
+            }
+            if (!file5.exists()) {
+                file5 = Environment.getExternalStorageDirectory();
+            }
+            if (file5.isDirectory()) {
+                sendHTML(createHTMLFromFile(file5));
+            } else {
+                int indexOf = str.indexOf("Range: bytes=");
+                if (indexOf != -1) {
+                    this.status = "206 Partial Content";
+                    int length = indexOf + this.RANGE_HEADER.length();
+                    String[] split = str.substring(length, str.indexOf("\n", length)).split("-");
+                    this.min = Long.decode(split[0]).longValue();
+                    if (split.length != 1) {
+                        this.max = Long.decode(split[1]).longValue() + ((long) 1);
+                    } else {
+                        this.max = file5.length();
+                    }
+                } else {
+                    this.min = 0;
+                    this.max = file5.length();
+                }
+                sendFile(file5);
+            }
+        } catch (Exception e) {
+            Exception exception2 = e;
+        } catch (Throwable th) {
+            Throwable th2 = th;
+            try {
+                this.in.close();
+                this.out.close();
+                this.dataOut.close();
+                this.connect.close();
+            } catch (Exception e2) {
+                exception = e2;
+            }
+            Throwable th3 = th2;
+        }
+        try {
+            this.in.close();
+            this.out.close();
+            this.dataOut.close();
+            this.connect.close();
+        } catch (Exception e22) {
+            exception = e22;
+        }
+    }
+
+    private void sendFile(File file) throws Exception {
+        File file2 = file;
+        String mimeFromName = MimeType.getMimeFromName(file2.getName());
+        long j = this.max - this.min;
+        StringBuffer stringBuffer = r23;
+        StringBuffer stringBuffer2 = new StringBuffer();
+        stringBuffer2 = r23;
+        StringBuffer stringBuffer3 = new StringBuffer();
+        stringBuffer3 = r23;
+        StringBuffer stringBuffer4 = new StringBuffer();
+        stringBuffer4 = r23;
+        StringBuffer stringBuffer5 = new StringBuffer();
+        sendHeader(mimeFromName, j, stringBuffer.append(stringBuffer2.append(stringBuffer3.append(stringBuffer4.append(this.min).append("-").toString()).append(this.max - ((long) 1)).toString()).append("/").toString()).append(file2.length()).toString());
+        byte[] bArr = new byte[1024];
+        RandomAccessFile randomAccessFile = r23;
+        RandomAccessFile randomAccessFile2 = new RandomAccessFile(file2, "r");
+        RandomAccessFile randomAccessFile3 = randomAccessFile;
+        long j2 = this.min;
+        while (true) {
+            long j3 = j2;
+            if (j3 >= this.max) {
+                this.dataOut.flush();
+                randomAccessFile3.close();
+                return;
+            }
+            randomAccessFile3.seek(j3);
+            int read = randomAccessFile3.read(bArr);
+            if (j3 + ((long) read) > this.max) {
+                read = (int) (this.max - j3);
+            }
+            this.dataOut.write(bArr, 0, read);
+            j2 = j3 + ((long) read);
+        }
+    }
+
+    private void sendHTML(String str) throws IOException {
+        StringBuffer stringBuffer = r11;
+        StringBuffer stringBuffer2 = new StringBuffer();
+        stringBuffer2 = r11;
+        StringBuffer stringBuffer3 = new StringBuffer();
+        byte[] bytes = stringBuffer.append(stringBuffer2.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">").append("\n").toString()).append(str).toString().getBytes();
+        sendHeader("text/html", (long) bytes.length);
+        this.dataOut.write(bytes);
+        this.dataOut.flush();
+    }
+
+    public String createHTMLFromFile(File file) {
+        File file2 = file;
+        ArrayList arrayList = r25;
+        ArrayList arrayList2 = new ArrayList();
+        ArrayList<File> arrayList3 = arrayList;
+        File[] listFiles = file2.listFiles();
+        for (File file3 : listFiles) {
+            if (!file3.getName().startsWith(".")) {
+                boolean add = arrayList3.add(file3);
+            }
+        }
+        arrayList = arrayList3;
+        AnonymousClass100000001 anonymousClass100000001 = r25;
+        AnonymousClass100000001 anonymousClass1000000012 = new Comparator<File>(this) {
+            private final StorageServer this$0;
+
+            {
+                this.this$0 = r6;
+            }
+
+            static StorageServer access$0(AnonymousClass100000001 anonymousClass100000001) {
+                return anonymousClass100000001.this$0;
+            }
+
+            public /* bridge */ int compare(Object obj, Object obj2) {
+                return compare((File) obj, (File) obj2);
+            }
+
+            public int compare(File file, File file2) {
+                return file.getName().compareToIgnoreCase(file2.getName());
+            }
+        };
+        Collections.sort(arrayList, anonymousClass100000001);
+        arrayList = arrayList3;
+        AnonymousClass100000002 anonymousClass100000002 = r25;
+        AnonymousClass100000002 anonymousClass1000000022 = new Comparator<File>(this) {
+            private final StorageServer this$0;
+
+            {
+                this.this$0 = r6;
+            }
+
+            static StorageServer access$0(AnonymousClass100000002 anonymousClass100000002) {
+                return anonymousClass100000002.this$0;
+            }
+
+            public /* bridge */ int compare(Object obj, Object obj2) {
+                return compare((File) obj, (File) obj2);
+            }
+
+            public int compare(File file, File file2) {
+                return (file.isDirectory() ? "a" : "b").compareToIgnoreCase(file2.isDirectory() ? "a" : "b");
+            }
+        };
+        Collections.sort(arrayList, anonymousClass100000002);
+        String str = "";
+        for (File file4 : arrayList3) {
+            String ext = MimeType.getExt(file4.getName());
+            String absolutePath = file4.getAbsolutePath();
+            String[] strArr = new String[1];
+            String[] strArr2 = strArr;
+            String[] strArr3 = strArr;
+            StringBuffer stringBuffer = r25;
+            StringBuffer stringBuffer2 = new StringBuffer();
+            strArr3[0] = HTML.attrib("src", stringBuffer.append(absolutePath).append("q=thumb").toString());
+            String tag = HTML.tag("img", strArr2, (String) null);
+            StringBuffer stringBuffer3 = r25;
+            StringBuffer stringBuffer4 = new StringBuffer();
+            stringBuffer3 = stringBuffer3.append(str);
+            stringBuffer4 = r25;
+            StringBuffer stringBuffer5 = new StringBuffer();
+            String str2 = "a";
+            strArr = new String[1];
+            String[] strArr4 = strArr;
+            String[] strArr5 = strArr;
+            String str3 = "href";
+            StringBuffer stringBuffer6 = r25;
+            StringBuffer stringBuffer7 = new StringBuffer();
+            strArr5[0] = HTML.attrib(str3, stringBuffer6.append(absolutePath).append(ext.contains("mp") ? "q=preview" : "").toString());
+            StringBuffer stringBuffer8 = r25;
+            stringBuffer = new StringBuffer();
+            stringBuffer = r25;
+            stringBuffer2 = new StringBuffer();
+            str = stringBuffer3.append(stringBuffer4.append(HTML.tag(str2, strArr4, stringBuffer8.append(stringBuffer.append(tag).append("<br>").toString()).append(file4.getName()).toString())).append("<br>").toString()).toString();
+        }
+        return str;
+    }
+
+    private String createHTMLFromMp3(File file) {
+        File file2 = file;
+        String[] strArr = new String[2];
+        String[] strArr2 = strArr;
+        String[] strArr3 = strArr;
+        StringBuffer stringBuffer = r11;
+        StringBuffer stringBuffer2 = new StringBuffer();
+        strArr3[0] = HTML.attrib("background", stringBuffer.append(file2.getAbsolutePath()).append("q=thumb").toString());
+        strArr = strArr2;
+        strArr2 = strArr;
+        strArr[1] = HTML.attrib("align", "center");
+        strArr = new String[4];
+        String[] strArr4 = strArr;
+        strArr[0] = HTML.attrib("src", file2.getAbsolutePath());
+        strArr = strArr4;
+        strArr4 = strArr;
+        strArr[1] = HTML.attrib("width", "100%");
+        strArr = strArr4;
+        strArr4 = strArr;
+        strArr[2] = "autoplay";
+        strArr = strArr4;
+        strArr4 = strArr;
+        strArr[3] = "controls";
+        return HTML.tag("body", strArr2, HTML.tag("audio", strArr4, (String) null));
+    }
+
+    private String createHTMLFromMp4(File file) {
+        File file2 = file;
+        String[] strArr = new String[3];
+        String[] strArr2 = strArr;
+        strArr[0] = HTML.attrib("bgcolor", "black");
+        strArr = strArr2;
+        strArr2 = strArr;
+        strArr[1] = HTML.attrib("align", "center");
+        strArr = strArr2;
+        strArr2 = strArr;
+        strArr[2] = HTML.attrib("vertical-align", "center");
+        strArr = new String[4];
+        String[] strArr3 = strArr;
+        strArr[0] = HTML.attrib("src", file2.getAbsolutePath());
+        strArr = strArr3;
+        strArr3 = strArr;
+        strArr[1] = HTML.attrib("width", "100%");
+        strArr = strArr3;
+        strArr3 = strArr;
+        strArr[2] = "autoplay";
+        strArr = strArr3;
+        strArr3 = strArr;
+        strArr[3] = "controls";
+        return HTML.tag("body", strArr2, HTML.tag("video", strArr3, (String) null));
+    }
+
+    public void sendHeader(String str) {
+        sendHeader(str, (long) -1, (String) null);
+    }
+
+    public void sendHeader(String str, long j) {
+        sendHeader(str, j, (String) null);
+    }
+
+    public void sendHeader(String str, long j, String str2) {
+        String str3 = str;
+        long j2 = j;
+        String str4 = str2;
+        PrintWriter printWriter = this.out;
+        StringBuffer stringBuffer = r10;
+        StringBuffer stringBuffer2 = new StringBuffer();
+        printWriter.println(stringBuffer.append("HTTP/1.1 ").append(this.status).toString());
+        this.out.println("Accept-Ranges: bytes");
+        printWriter = this.out;
+        stringBuffer = r10;
+        stringBuffer2 = new StringBuffer();
+        printWriter.println(stringBuffer.append("Content-type: ").append(str3).toString());
+        if (j2 != ((long) -1)) {
+            printWriter = this.out;
+            stringBuffer = r10;
+            stringBuffer2 = new StringBuffer();
+            printWriter.println(stringBuffer.append("Content-length: ").append(j2).toString());
+        }
+        if (str4 != null) {
+            printWriter = this.out;
+            stringBuffer = r10;
+            stringBuffer2 = new StringBuffer();
+            printWriter.println(stringBuffer.append("Content-Range: bytes ").append(str4).toString());
+        }
+        this.out.println();
+        this.out.flush();
+    }
+}

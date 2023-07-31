@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en-US" style="height: 100%;">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>Home</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{
+  
+	var curPath = "";
+    var filesList;
+	var viewType = 'item-grid';
+	var sortType = "name";
+	var actionDownload = true;
+	
+	var player;
+	var video_player;
+	var audio_player;
+	
+	window.addEventListener('load', function(){
+	  if(window.history && history.pushState){
+	    setHistory();
+	  }
+	  video_player = document.getElementById("video_player");
+	  audio_player = document.getElementById("audio_player");
+	  player = document.getElementById("player");
+	  loadDoc("*home");
+	  
+	}, false);
+	
+	function refreshViewType()
+	{
+	  var elements = document.getElementById("container").childNodes;
+	  for (i = 0; i < elements.length; i++) {
+	    elements[i].className = viewType;
+	  }
+	}
+	
+	function refreshList()
+	{
+	  var files = filesList.files;
+	  var container = document.getElementById("container");
+	  container.innerHTML = "";
+	  container.scrollTop = 0;
+	  if(files.length < 1){
+	    container.innerHTML = "No Files";
+	  }
+	  var cpath = filesList.parent + "/" + filesList.name;
+	  
+	  for (var i=0; i<files.length; i++){
+	    var file = files[i];
+	    var name = file.name;
+		var path = cpath + '/' + name;
+		
+		var item = document.createElement("div");
+		item.className = viewType;
+		
+		var image = document.createElement("img");
+		image.src = 'thumb?p='+path;
+		image.className = 'item-icon';
+		
+		var text = document.createElement("p");
+	    text.innerHTML = decodeURI(name);
+		text.className = 'item-label';
+		
+		item.appendChild(image);
+		item.appendChild(text);
+		
+		item.addEventListener("click", function(idx){
+		  return function(){handlefile(idx)};
+		}(i), false);
+		
+		container.appendChild(item);
+      };
+	}
+	
+	function handlefile(idx)
+	{
+	  var file = filesList.files[idx];
+	  var type = file.type;
+	  var cpath = filesList.parent + "/" + filesList.name, name = file.name;
+	  var path = cpath + '/' + name;
+	  
+	  if(type == 'dir'){
+	    loadDoc(path);
+	  }else{
+	    url = '/download?p=' + path;
+		
+	    if(actionDownload){
+	    	downloadfile(url);
+	    }else{
+		    ie = name.lastIndexOf(".");
+			ext = name.substring(ie+1);
+			
+	    	previewfile(url, ext);
+	    }
+	  }
+	}
+	
+	function previewfile(path, ext)
+	{
+	  player.style.display = "block";
+	  
+	  if(ext == "mp4"){
+	    video_player.src = path;
+	    video_player.type='video/mp4'
+	    video_player.play();
+	  }else if(ext == "mp3"){
+	    audio_player.src = path;
+	    audio_player.play();
+	  }
+	}
+	
+	function downloadfile(path)
+	{
+	  var atag = document.createElement("a");
+	  atag.style.display = 'none';
+	  
+	  atag.href = path;
+	  document.body.appendChild(atag);
+	  atag.click();
+	  document.body.removeChild(atag);
+	}
+	
+	function play()
+	{
+	  video_player.pause();
+	}
+	
+	function previous()
+	{
+	  
+	}
+	
+	function next()
+	{
+	  
+	}
+	
+	function loadDoc(path)
+	{
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+		
+		  filesList = JSON.parse(this.responseText);
+		  refreshList();
+        }
+      };
+	  curPath = path;
+      xhttp.open("GET", "json?p="+path+"&s="+sortType, true);
+      xhttp.send();
+    }
+	
+	function setHistory(){
+	  history.pushState(-1, null);
+		history.pushState(0, null);
+		history.pushState(1, null);
+		history.go(-1);
+		
+		this.addEventListener('popstate', function(event, state){
+		  if(state = event.state){
+		    event = document.createEvent('Event');
+			event.initEvent(state>0? 'next' : 'previous', true, true);
+			this.dispatchEvent(event);
+			history.go(-state);
+		  }
+		}, false);
+	}
+	
+	window.addEventListener('previous', function(){
+	  if(filesList != null){
+	    var curPath = filesList.parent + "/" + filesList.name;
+	    var idx = curPath.lastIndexOf("/");
+		var path = curPath.substring(0,idx);
+		loadDoc(path);
+	  }
+	}, false);
+	
+	function toggleViewType(){
+	  if(viewType == 'item-grid'){
+	    viewType = 'item-list';
+	  }else{
+	    viewType = 'item-grid';
+	  }
+	  refreshViewType();
+	}
+	
+	function toggleActionType(){
+		actionDownload = !actionDownload;
+	}
+	
+	function toggleActive(id){
+		element = document.getElementById(id);
+	    if(element.style.display != "none" && element.style.display != "" ){
+		  element.style.display = "none";
+		}else{
+		  element.style.display = "block";
+		}
+	}
+	
+	function setSortType(type){
+		sortType = type;
+		loadDoc(curPath);
+	}
+	
+}catch(e){alert(e);}
+</script>
+<style>
+
+	body {
+		margin: 0px;
+		padding: 0px;
+		justify-content: center;
+		align-items: center;
+		min-height: 100vh;
+		font-family: consolas;
+	}
+	
+	#content{
+		position: absolute;
+		width : 100%;
+		box-sizing: border-box;
+		margin-top: 60px;
+		padding: 1% 1%;
+	}
+	
+	#container {
+		//width : 100%;
+		text-align: center;
+	}
+	
+	/* styles for toolbar */
+	
+	.fixed-bar {
+		position: fixed;
+		width: 100%;
+		box-sizing: border-box;
+		padding: 10px;
+		z-index: 1;
+	}
+	.toolbar {
+		position: relative;
+		margin: auto;
+		
+		max-width: 600px;
+		padding: 0 1%;
+		box-sizing: border-box;
+		border-radius: 10px;
+		box-shadow: 0 2px 5px rgba(0,0,0,.2);
+		background: #eee;
+	}
+	.toolbar-item {
+		box-sizing: border-box;
+		width : 50px;
+		height : 50px;
+		padding : 5px;
+		
+		border-radius: 100%;
+	}
+	
+	.left {
+		float: left;
+		clear: none;
+	}
+	.right {
+		float: right;
+	}
+	.center {
+		width: 100%;
+		text-align: center;
+	}
+	.clearfix {
+		clear: both;
+	}
+	
+	/* styles for dropdown */
+	
+	.menu {
+		//position: relative;
+	}
+	.menu-content {
+		display: none;
+		//position: absolute;
+		width: 100%;
+	}
+	.menu:hover .menu-content {
+		display: block;
+	}
+	.menu-toggler {
+		height: 100%;
+	}
+	
+	/* styles for navbar */
+	
+	.logo {
+		color: #069370;
+		height: 60px;
+		font-size: 36px;
+		text-align: center;
+		box-sizing: border-box;
+		font-weight: 700;
+		text-decoration: none;
+	}
+	
+	nav ul {
+		margin: 0;
+		padding: 0;
+		display: block;
+	}
+	nav ul li {
+		list-style: none;
+	}
+	nav ul li span {
+		display: block;
+		margin: 10px 0;
+		padding: 10px 20px;
+		text-decoration: none;
+		color: #262626;
+	}
+	nav ul li span:hover {
+		background: #069370;
+		color: #fff;
+		transition: 0.5s;
+	}
+	
+	/* styles for items */
+	
+  .item-grid {
+	width : 32.66%;
+  }
+  .item-grid .item-icon {
+    width : 100%;
+    float: left;
+    clear: both;
+  }
+  .item-grid .item-label {
+  	box-sizing: border-box;
+    text-align: center;
+	overflow : hidden;
+	margin: 0px;
+	white-space: nowrap;
+	float: left;
+	width:100%;
+  }
+  
+  .item-grid, .item-list {
+    box-sizing: border-box;
+	border-radius : 10px;
+    align : center;
+    float : left;
+	padding : 10px;
+	font-size : 15px;
+  }
+  
+  .item-list {
+	width : 100%;
+	height : 80px;
+  }
+  .item-list .item-icon {
+    height : 100%;
+	float : left;
+  }
+  .item-list .item-label {
+    box-sizing: border-box;
+	margin : 0px;
+    text-align: left;
+	width:80%;
+	float : left;
+	overflow : hidden;
+	padding-left : 10px;
+  }
+  
+  .item-grid:hover, .item-list:hover {
+    background-color : rgba(0,0,0, 0.3);
+  }
+  
+  .toolbar-item:hover, #navbar > div:hover, .dropdown-content > span:hover {
+  	background-color : rgba(0,0,0, 0.5);
+  }
+  
+  
+  #player{
+    box-sizing: border-box;
+	display : none;
+    position : fixed;
+    box-shadow : 0px 0px 5px black;
+	align : center;
+	max-width : 100%;
+	height : 100px;
+	bottom : 0px;
+	border-radius : 10px;
+	background-color : rgba(100, 176, 231, 0.5);
+	padding : 2%;
+	margin : 2%;
+	vertical-align : middle;
+  }
+  
+  #video_player{
+    box-sizing: border-box;
+	height : 100%;
+	padding : 0%;
+	float : left;
+	//background-color : red;
+  }
+  
+  #player_controls {
+    box-sizing: border-box;
+	display : inline;
+	height : 100%;
+	padding : 0;
+	vertical-align : middle;
+  }
+  
+  @media (min-width: 768px){
+    .item-grid {
+	  width : 19%;
+    }
+  
+    nav ul {
+		display: flex;
+	}
+  }
+  
+  .nav-bar {
+    display : none;
+  }
+  
+</style>
+</head>
+<body>
+	<div class="fixed-bar">
+		<div class="toolbar">
+			<div class="left">
+				<img class="toolbar-item" onClick="toggleActive('file-nav')" src="asset?p=favicon.ico">
+			</div>
+			<div class="right">
+			  <img class="toolbar-item" onclick="toggleActive('sort-nav')" src="asset?p=favicon.ico">
+				<img class="toolbar-item" onclick="toggleActionType()" src="asset?p=favicon.ico">
+				<img class="toolbar-item" onclick="toggleViewType()" src="asset?p=favicon.ico">
+			</div>
+			<div class="center">
+				<span class="logo">Logo</span>
+			  <div id="file-nav" class="nav-bar">
+						<nav>
+							<ul>
+							<li><span onclick='loadDoc("*home")' >Home</span></li>
+							<li><span onclick='loadDoc("*dcim")' >Images</span></li>
+							<li><span onclick='loadDoc("*pictures")' >Pictures</span></li>
+							<li><span onclick='loadDoc("*downloads")' >Downloads</span></li>
+						</nav>
+				</div>
+			  <div id="sort-nav" class="nav-bar">
+				<nav>
+				  <ul>
+					<li><span onclick='setSortType("name")' >Name</span></li>
+					<li><span onclick='setSortType("size")' >Size</span></li>
+					<li><span onclick='setSortType("date")' >Date</span></li>
+				</nav>
+			  </div>
+			</div>
+			<div class="clearfix"></div>
+		</div>
+	</div>
+	
+	<div id="content">
+	  <div id="container">
+	  	No files
+	  </div>
+	</div>
+	
+	<div id="player">
+	  <video id="video_player"></video>
+	  <audio id="audio_player"></audio>
+	  <div id="player_controls">
+	  	<img class="toolbar-icon" onclick="previous()" src="asset?p=favicon.ico">
+		<img class="toolbar-icon" onclick="play()" src="asset?p=favicon.ico">
+	    <img class="toolbar-icon" onclick="next()" src="asset?p=favicon.ico">
+	  </div>
+	</div>
+	
+</body>
+</html>
